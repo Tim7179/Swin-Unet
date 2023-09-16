@@ -68,8 +68,9 @@ def trainer_synapse(args, model, snapshot_path):
             loss_dice = dice_loss(outputs, label_batch, softmax=True)
             loss = 0.4 * loss_ce + 0.6 * loss_dice
             
-            MIoU_Score = miou_coeff(outputs, label_batch)
-            
+            MIoU_Score, class_iou = miou_coeff(outputs, label_batch)
+            with open('log.txt', '+a') as file:
+                file.write(f"{iter_num}: MIoU: {MIoU_Score} {class_iou}")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
