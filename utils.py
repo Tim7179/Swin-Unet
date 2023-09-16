@@ -6,6 +6,40 @@ import torch.nn as nn
 import SimpleITK as sitk
 from torch.autograd import Function
 # MIoU
+#from ignite.metrics import IoU
+
+
+def calculate_iou(predicted_mask, ground_truth_mask):
+    # Convert NumPy arrays to PyTorch tensors and move them to GPU if available
+    predicted_mask = torch.tensor(predicted_mask, dtype=torch.bool, device='cuda')
+    ground_truth_mask = torch.tensor(ground_truth_mask, dtype=torch.bool, device='cuda')
+    
+    intersection = torch.logical_and(predicted_mask, ground_truth_mask)
+    union = torch.logical_or(predicted_mask, ground_truth_mask)
+    
+    # Calculate IoU on GPU
+    iou = torch.sum(intersection) / torch.sum(union)
+    
+    # Move the result back to CPU (if you want to print it)
+    iou = iou.cpu().item()
+    
+    return iou
+
+# Function to calculate mIoU on GPU
+def calculate_miou(predicted_masks, ground_truth_masks):
+    class_iou = []
+    num_classes = predicted_masks.shape[0]
+    
+    for class_idx in range(num_classes):
+        class_iou.append(calculate_iou(predicted_masks[class_idx], ground_truth_masks[class_idx]))
+    
+    mIoU = sum(class_iou) / len(class_iou)
+    
+    return mIoU
+
+def miou_coeff(predicted_masks, ground_truth_masks):
+    return calculate_miou(predicted_masks, ground_truth_masks)
+'''
 class MIoU(Function):
 
     @staticmethod
@@ -41,6 +75,8 @@ def miou_coeff(inputs, target):
         s += MIoU.apply(inputs[i], target[i])
     
     return s / num_samples
+'''
+
 
 ## MIoU
 
