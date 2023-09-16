@@ -4,7 +4,45 @@ from medpy import metric
 from scipy.ndimage import zoom
 import torch.nn as nn
 import SimpleITK as sitk
+from torch.autograd import Function
+# MIoU
+class MIoU(Function):
 
+    @staticmethod
+    def forward(ctx, pred, target):
+        # Calculate intersection and union
+        intersection = torch.sum(pred * target)
+        union = torch.sum(pred) + torch.sum(target) - intersection
+        
+        # Calculate MIoU with a minimum epsilon value to avoid division by zero
+        epsilon = 1e-6  # You can adjust this epsilon value as needed
+        iou = (intersection + epsilon) / (union + epsilon)
+        
+        # Save for backward pass
+        ctx.save_for_backward(pred, target)
+
+        return iou
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        #反向傳播計算梯度
+        pred, target = ctx.saved_tensors
+        intersection = torch.sum(pred * target)
+        union = torch.sum(pred) + torch.sum(target) - intersection
+        d_iou = grad_output * ((target * union) - (intersection * pred)) / (union ** 2)
+        return d_iou, -d_iou
+
+def miou_coeff(inputs, target):
+    """Mean IoU for batches"""
+    num_samples = inputs.size(0)
+    s = torch.FloatTensor(1).zero_().to(inputs.device)
+    
+    for i in range(num_samples):
+        s += MIoU.apply(inputs[i], target[i])
+    
+    return s / num_samples
+
+## MIoU
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
@@ -21,7 +59,7 @@ class DiceLoss(nn.Module):
 
     def _dice_loss(self, score, target):
         target = target.float()
-        smooth = 1e-5
+        smooth = 1e-10
         intersect = torch.sum(score * target)
         y_sum = torch.sum(target * target)
         z_sum = torch.sum(score * score)
@@ -30,6 +68,12 @@ class DiceLoss(nn.Module):
         return loss
 
     def forward(self, inputs, target, weight=None, softmax=False):
+        if torch.isnan(inputs).any() or torch.isinf(inputs).any():
+            raise ValueError('Model output contains NaN or infinite values')
+
+        if torch.isnan(target).any() or torch.isinf(target).any():
+            raise ValueError('Target contains NaN or infinite values')
+
         if softmax:
             inputs = torch.softmax(inputs, dim=1)
         target = self._one_hot_encoder(target)
