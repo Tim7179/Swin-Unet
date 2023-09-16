@@ -10,7 +10,7 @@ if [$out_dir]
 then
     OUT_DIR = $out_dir
 else
-    OUT_DIR  = './model_out'
+    OUT_DIR  = './output'
 fi
 
 if [$cfg]
@@ -45,7 +45,7 @@ if [$batch_size]
 then
     BATCH_SIZE = $batch_size
 else
-    BATCH_SIZE = 24
+    BATCH_SIZE = 108
 fi
 
 echo "start test model"
