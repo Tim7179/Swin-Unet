@@ -11,8 +11,8 @@ from torch.autograd import Function
 
 def calculate_iou(predicted_mask, ground_truth_mask):
     # Convert NumPy arrays to PyTorch tensors and move them to GPU if available
-    predicted_mask = torch.tensor(predicted_mask, dtype=torch.bool, device='cuda')
-    ground_truth_mask = torch.tensor(ground_truth_mask, dtype=torch.bool, device='cuda')
+    #predicted_mask = torch.tensor(predicted_mask, dtype=torch.bool, device='cuda')
+    #ground_truth_mask = torch.tensor(ground_truth_mask, dtype=torch.bool, device='cuda')
     
     intersection = torch.logical_and(predicted_mask, ground_truth_mask)
     union = torch.logical_or(predicted_mask, ground_truth_mask)
