@@ -5,6 +5,8 @@ from scipy.ndimage import zoom
 import torch.nn as nn
 import SimpleITK as sitk
 from torch.autograd import Function
+from PIL import Image
+
 # MIoU
 #from ignite.metrics import IoU
 
@@ -23,6 +25,7 @@ def calculate_iou(predicted_mask, ground_truth_mask):
     # Move the result back to CPU (if you want to print it)
     iou = iou.cpu().item()
     
+    
     return iou
 
 # Function to calculate mIoU on GPU
@@ -35,7 +38,7 @@ def calculate_miou(predicted_masks, ground_truth_masks):
     
     mIoU = sum(class_iou) / len(class_iou)
     
-    return mIoU
+    return mIoU, class_iou
 
 def miou_coeff(predicted_masks, ground_truth_masks):
     return calculate_miou(predicted_masks, ground_truth_masks)
@@ -125,21 +128,63 @@ class DiceLoss(nn.Module):
         return loss / self.n_classes
 
 
+# add MeanIoU
 def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1
     gt[gt > 0] = 1
-    if pred.sum() > 0 and gt.sum()>0:
+    
+    intersection = (pred & gt).sum()
+    union = (pred | gt).sum()
+    
+    if union > 0:
+        iou = intersection / union
+    else:
+        iou = 0.0
+    
+    if pred.sum() > 0 and gt.sum() > 0:
         dice = metric.binary.dc(pred, gt)
         hd95 = metric.binary.hd95(pred, gt)
-        return dice, hd95
-    elif pred.sum() > 0 and gt.sum()==0:
-        return 1, 0
+        return dice, hd95, iou
+    elif pred.sum() > 0 and gt.sum() == 0:
+        return 1, 0, iou
     else:
-        return 0, 0
+        return 0, 0, iou
 
 
 def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_save_path=None, case=None, z_spacing=1):
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
+    
+    # 縮放影像，使其符合network輸入大小224x224
+    _, x, y = image.shape
+    if x != patch_size[0] or y != patch_size[1]:
+        image = zoom(image, (1, patch_size[0] / x, patch_size[1] / y), order=3)
+    input = torch.from_numpy(image).unsqueeze(0).float().cuda()
+    net.eval()
+    with torch.no_grad():
+        out = torch.argmax(torch.softmax(net(input), dim=1), dim=1).squeeze(0)
+        out = out.cpu().detach().numpy()
+        if x != patch_size[0] or y != patch_size[1]:
+            prediction = zoom(out, (x/patch_size[0], y/patch_size[1]), order=0)
+        else:
+            prediction = out
+    
+    metric_list = []
+    for i in range(1, classes):
+        metric_list.append(calculate_metric_percase(prediction == i, label == i))
+    
+    # Create a composite image for visual comparison
+    composite_image = np.zeros((x, y, 3), dtype=np.uint8)
+    composite_image[:,:,0] = (label == 1) * 255  # Red channel for the ground truth
+    composite_image[:,:,1] = (prediction == 1) * 255  # Green channel for the prediction
+    
+    if test_save_path is not None:
+        composite_image = Image.fromarray(composite_image)
+        composite_image.save(test_save_path + '/' + case + '.png')
+    
+    return metric_list
+    
+        
+            
     if len(image.shape) == 3:
         prediction = np.zeros_like(label)
         for ind in range(image.shape[0]):
