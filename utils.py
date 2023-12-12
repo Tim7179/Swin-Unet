@@ -28,13 +28,50 @@ def calculate_iou(predicted_mask, ground_truth_mask):
     
     return iou
 
+def calculate_iou_v2(pred, gt):
+    pred_long = pred
+    gt_long = gt
+    #pred[pred > 0.5] = 1
+    #pred[pred <= 0.5] = 0
+    #gt[gt > 0.5] = 1
+    #gt[gt <= 0.5] = 0
+    
+    intersection = torch.logical_and(pred_long, gt_long).sum()
+    union = torch.logical_or(pred_long,gt_long).sum()
+    
+    if union > 0:
+        iou = intersection / union
+    else:
+        iou = 0.0
+    
+    if pred_long.sum() > 0 and gt_long.sum() > 0:
+         # torch version dice
+        dice = 2 * intersection / (pred_long.sum() + gt_long.sum())
+        # Convert Long to Float
+        return dice, None, iou
+        # caculate hd95 ## still Can't work
+        # Convert Long to Float
+        #pred = pred.float()
+        #gt = gt.float()
+
+        # Calculate pairwise distances
+        #distances = torch.cdist(pred, gt)
+        # Use numpy to calculate the 95th percentile
+        #hd95 = np.percentile(distances.numpy(), 95)
+        #return dice, hd95, iou
+    elif pred_long.sum() > 0 and gt_long.sum() == 0:
+        return 1, 0, iou
+    else:
+        return 0, 0, iou
+
 # Function to calculate mIoU on GPU
 def calculate_miou(predicted_masks, ground_truth_masks):
     class_iou = []
     num_classes = predicted_masks.shape[0]
     
     for class_idx in range(num_classes):
-        class_iou.append(calculate_iou(predicted_masks[class_idx], ground_truth_masks[class_idx]))
+        dice, hd95, iou = calculate_iou_v2(predicted_masks[class_idx], ground_truth_masks[class_idx])
+        class_iou.append(iou)
     
     mIoU = sum(class_iou) / len(class_iou)
     
@@ -156,15 +193,13 @@ def test_single_volume(image, label, net, classes, patch_size=[224, 224], z_spac
     #print(image.shape)
     # 縮放影像，使其符合network輸入大小224x224
     
-    _, x, y= image.shape
-    print(image.shape)
+    x, y= image.shape
+    #print(image.shape)
     if x != patch_size[0] or y != patch_size[1]:
         image = zoom(image, (1, patch_size[0] / x, patch_size[1] / y), order=3)
-    #Image.SAVE(Image.fromarray(image), "input.png")
-    input = torch.from_numpy(image).unsqueeze(0).float().cuda()
     
-    #save_image(input, "input.png")
-
+    input = torch.from_numpy(image).unsqueeze(0).unsqueeze(0).float().cuda()
+    
     net.eval()
     with torch.no_grad():
         out = torch.argmax(torch.softmax(net(input), dim=1), dim=1).squeeze(0)
@@ -173,7 +208,7 @@ def test_single_volume(image, label, net, classes, patch_size=[224, 224], z_spac
             prediction = zoom(out, (x/patch_size[0], y/patch_size[1]), order=0)
         else:
             prediction = out
-    
+
     metric_list = []
     for i in range(1, classes):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
