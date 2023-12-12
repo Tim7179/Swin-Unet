@@ -15,6 +15,7 @@ from config import get_config
 from torchvision.utils import save_image
 from PIL import Image
 import csv
+import cv2
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--volume_path', type=str,
@@ -80,11 +81,12 @@ def save_images(image, label, pred_img, output_path, filename):
     label_filename = filename + '_label.png'
     pred_filename = filename + '_pred.png'
     composite_filename = filename + '_mix.png'
+    overlay_filename = filename + '_overlay.png'
     image_path = os.path.join(output_path, image_filename)
     label_path = os.path.join(output_path, label_filename)
     pred_path = os.path.join(output_path, pred_filename)
     composite_path = os.path.join(output_path, composite_filename)
-    
+    overlay_path = os.path.join(output_path, overlay_filename)
     # Save image
 
     # Save label
@@ -102,6 +104,10 @@ def save_images(image, label, pred_img, output_path, filename):
     composite_image = Image.fromarray(composite_image)
     composite_image.save(composite_path)
 
+    # Create a overlay image for visual comparison
+    overlay_image = Image.blend(image, pred_img, 0.6)
+    overlay_image.save(overlay_path)
+    
     logging.info('Images saved to {}'.format(output_path))
 
 
