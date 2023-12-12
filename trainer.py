@@ -14,20 +14,23 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import DiceLoss
 from torchvision import transforms
-from utils import test_single_volume
-from matplotlib import pyplot as plt
-from utils import miou_coeff
+from utils import calculate_metric_percase
 import time
 start_time = time.strftime("%m-%d_%H-%M", time.localtime())
 
-def trainer_synapse(args, model, snapshot_path):
+
+def trainer_synapse(args, model):
+    snapshot_path = args.output_dir
     from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
+    
     # 建立輸出的資料夾
-    os.makedirs(f'{snapshot_path}/{start_time}', exist_ok=True) #add
+    os.makedirs(os.path.join(snapshot_path,start_time), exist_ok=True) #add
+
     logging.basicConfig(filename=snapshot_path + "/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
+
     base_lr = args.base_lr
     num_classes = args.num_classes
     batch_size = args.batch_size * args.n_gpu
@@ -40,7 +43,7 @@ def trainer_synapse(args, model, snapshot_path):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=12, pin_memory=True,
                              worker_init_fn=worker_init_fn)
     
     
@@ -49,7 +52,6 @@ def trainer_synapse(args, model, snapshot_path):
     model.train()
     
     ce_loss = CrossEntropyLoss()
-    
     dice_loss = DiceLoss(num_classes)
     optimizer = optim.SGD(model.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0001)
     writer = SummaryWriter(snapshot_path + '/log')
@@ -68,9 +70,9 @@ def trainer_synapse(args, model, snapshot_path):
             loss_dice = dice_loss(outputs, label_batch, softmax=True)
             loss = 0.4 * loss_ce + 0.6 * loss_dice
             
-            MIoU_Score, class_iou = miou_coeff(outputs, label_batch)
+            mean_dice, mean_hd95, mean_iou = calculate_metric_percase(outputs, label_batch)
             with open('log.txt', '+a') as file:
-                file.write(f"{iter_num}: MIoU: {MIoU_Score} {class_iou}")
+                file.write(f"{iter_num}: MIoU: {mean_iou}")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -82,9 +84,9 @@ def trainer_synapse(args, model, snapshot_path):
             writer.add_scalar('info/lr', lr_, iter_num)
             writer.add_scalar('info/total_loss', loss, iter_num)
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
-            writer.add_scalar('info/MIoU_Score', MIoU_Score, iter_num)
+            writer.add_scalar('info/MIoU_Score', mean_iou, iter_num)
 
-            logging.info('iteration %d : loss : %f, loss_ce: %f, MIoU_Score: %f' % (iter_num, loss.item(), loss_ce.item(), MIoU_Score))
+            logging.info('iteration %d : loss : %f, dice_loss: %f, loss_ce: %f, MIoU_Score: %f' % (iter_num, loss.item(), loss_dice.item(), loss_ce.item(), mean_iou))
 
             if iter_num % 20 == 0:
                 image = image_batch[1, 0:1, :, :]
@@ -95,8 +97,8 @@ def trainer_synapse(args, model, snapshot_path):
                 labs = label_batch[1, ...].unsqueeze(0) * 50
                 writer.add_image('train/GroundTruth', labs, iter_num)
 
-        save_interval = 50  # int(max_epoch/6)
-        if epoch_num > int(max_epoch / 2) and (epoch_num + 1) % save_interval == 0:
+        save_interval = 25  # int(max_epoch/6)
+        if epoch_num > int(max_epoch / 4) and (epoch_num + 1) % save_interval == 0:
             save_mode_path = os.path.join(snapshot_path, f'{start_time}/epoch_{epoch_num}.pth')
             torch.save(model.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
