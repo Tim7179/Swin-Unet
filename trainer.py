@@ -15,6 +15,7 @@ from tqdm import tqdm
 from utils import DiceLoss
 from torchvision import transforms
 from utils import calculate_metric_percase
+from utils import miou_coeff
 import time
 start_time = time.strftime("%m-%d_%H-%M", time.localtime())
 
@@ -69,8 +70,10 @@ def trainer_synapse(args, model):
             loss_ce = ce_loss(outputs, label_batch[:].long())
             loss_dice = dice_loss(outputs, label_batch, softmax=True)
             loss = 0.4 * loss_ce + 0.6 * loss_dice
-            
-            mean_dice, mean_hd95, mean_iou = calculate_metric_percase(outputs, label_batch)
+            #for outputs, label_batch in tqdm(zip(outputs, label_batch)):
+            #    mean_dice, mean_hd95, mean_iou = calculate_metric_percase(outputs, label_batch)
+            mean_iou, class_iou = miou_coeff(outputs, label_batch)
+
             with open('log.txt', '+a') as file:
                 file.write(f"{iter_num}: MIoU: {mean_iou}")
             optimizer.zero_grad()
@@ -111,4 +114,5 @@ def trainer_synapse(args, model):
             break
 
     writer.close()
+    
     return "Training Finished!"
