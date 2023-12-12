@@ -1,4 +1,4 @@
 .ipynb_checkpoints
 __pycache__
 output
-pretrained_ckpts/*
+pretrained_ckpt
