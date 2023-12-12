@@ -14,6 +14,7 @@ TEST_FOLDER = '../Swin-Unet/data/Synapse/test_vol_h5/'
 LIST_FOLDER = '../Swin-Unet/lists/lists_Synapse/'
 
 IMAGE_SIZE = 224
+THRESHOLD = 128
 
 # Clear or create the target folder
 def inital_folder(folder):
@@ -30,7 +31,7 @@ def convert_to_binary(image):
     image = np.clip(image, 0, 255)
 
     # use threshold to convert to binary
-    _, binary_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, binary_image = cv2.threshold(image, THRESHOLD, 1, cv2.THRESH_BINARY)
 
     return binary_image
 
